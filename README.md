@@ -1,12 +1,18 @@
 # RealFi Payroll dApp (Pharos Testnet)
 
-This app now supports:
+This app now uses **email-based onboarding only** (no wallet connection flow in UI).
 
-- Wallet connect (MetaMask-compatible)
-- Default network switch to **Pharos Testnet**
-- Email registration as either:
-  - **Employer**
-  - **User**
+## Registration and Profile
+
+Every user (Employer or User) registers with an email address.
+On registration, a profile is automatically created and can be edited with:
+
+- Name
+- Username
+- Profile picture upload
+- Bio
+- Social binding links (Twitter, LinkedIn, GitHub)
+- Sign out
 
 ## Role-based UI
 

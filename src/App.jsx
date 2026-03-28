@@ -1,26 +1,21 @@
 import React, { useMemo, useState } from 'react';
 
-const PHAROS_TESTNET = {
-  id: 688688,
-  chainIdHex: '0xa81f0',
-  chainName: 'Pharos Testnet',
-  nativeCurrency: {
-    name: 'PHRS',
-    symbol: 'PHRS',
-    decimals: 18
-  },
-  rpcUrls: ['https://testnet.dplabs-internal.com'],
-  blockExplorerUrls: ['https://testnet.pharosscan.xyz']
-};
-
 const SHORT_ADDRESS = (value = '') =>
   value.length > 10 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 
+const emptyProfile = {
+  name: '',
+  username: '',
+  bio: '',
+  twitter: '',
+  linkedin: '',
+  github: '',
+  avatarUrl: ''
+};
+
 function App() {
   const [auth, setAuth] = useState({ email: '', role: 'employer', registered: false });
-  const [walletAddress, setWalletAddress] = useState('');
-  const [connectedChainId, setConnectedChainId] = useState(null);
-  const [walletError, setWalletError] = useState('');
+  const [profile, setProfile] = useState(emptyProfile);
   const [activeTab, setActiveTab] = useState('send');
 
   const [txForm, setTxForm] = useState({ to: '', amount: '' });
@@ -46,50 +41,15 @@ function App() {
     [transactionHistory]
   );
 
-  const ensurePharos = async () => {
-    if (!window.ethereum) {
-      throw new Error('MetaMask (or compatible wallet) is required.');
-    }
-
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: PHAROS_TESTNET.chainIdHex }]
-      });
-    } catch (error) {
-      if (error.code === 4902) {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [PHAROS_TESTNET]
-        });
-      } else {
-        throw error;
-      }
-    }
-
-    setConnectedChainId(PHAROS_TESTNET.id);
-  };
-
-  const connectWallet = async () => {
-    setWalletError('');
-    try {
-      if (!window.ethereum) {
-        throw new Error('No wallet found. Install MetaMask first.');
-      }
-
-      await ensurePharos();
-
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const chainHex = await window.ethereum.request({ method: 'eth_chainId' });
-      setWalletAddress(accounts[0] || '');
-      setConnectedChainId(Number.parseInt(chainHex, 16));
-    } catch (error) {
-      setWalletError(error?.message || 'Wallet connection failed.');
-    }
-  };
-
   const handleRegister = (event) => {
     event.preventDefault();
+    const autoUsername = auth.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    setProfile({
+      ...emptyProfile,
+      name: autoUsername || 'New User',
+      username: autoUsername || `user${Math.floor(1000 + Math.random() * 9000)}`,
+      bio: `Hi, I am ${autoUsername || 'a new member'} on RealFi Payroll.`
+    });
     setAuth((current) => ({ ...current, registered: true }));
     setActiveTab('send');
   };
@@ -97,6 +57,27 @@ function App() {
   const onAuthChange = (event) => {
     const { name, value } = event.target;
     setAuth((current) => ({ ...current, [name]: value, registered: false }));
+  };
+
+  const onProfileChange = (event) => {
+    const { name, value } = event.target;
+    setProfile((current) => ({ ...current, [name]: value }));
+  };
+
+  const onAvatarUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setProfile((current) => ({ ...current, avatarUrl: previewUrl }));
+  };
+
+  const signOut = () => {
+    setAuth({ email: '', role: 'employer', registered: false });
+    setProfile(emptyProfile);
+    setActiveTab('send');
+    setTxForm({ to: '', amount: '' });
+    setPayForm({ worker: '', amount: '' });
+    setCollectAmount('0');
   };
 
   const onTxFormChange = (event) => {
@@ -179,20 +160,7 @@ function App() {
       <header className="top-card">
         <div>
           <h1>RealFi Payroll · Pharos</h1>
-          <p>Connect wallet, switch to Pharos testnet by default, and operate payroll + Web3 transfers.</p>
-        </div>
-        <div className="wallet-box">
-          <p>
-            Chain target: <strong>{PHAROS_TESTNET.chainName}</strong> ({PHAROS_TESTNET.id})
-          </p>
-          <button className="primary" type="button" onClick={connectWallet}>
-            {walletAddress ? `Connected: ${SHORT_ADDRESS(walletAddress)}` : 'Connect Wallet'}
-          </button>
-          <button className="secondary" type="button" onClick={ensurePharos}>
-            Switch to Pharos Testnet
-          </button>
-          <p className="muted">Active chain ID: {connectedChainId ?? 'Not connected'}</p>
-          {walletError ? <p className="error">{walletError}</p> : null}
+          <p>Email-based onboarding with role-specific payroll flows and profile customization.</p>
         </div>
       </header>
 
@@ -218,7 +186,7 @@ function App() {
             </select>
           </label>
           <button className="primary" type="submit">
-            Register
+            Register and Create Profile
           </button>
         </form>
         {auth.registered ? (
@@ -229,163 +197,227 @@ function App() {
       </section>
 
       {auth.registered ? (
-        <section className="card">
-          <div className="tabs">
-            {roleTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                className={activeTab === tab.key ? 'active' : ''}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
+        <>
+          <section className="card">
+            <div className="profile-head">
+              <h2>Profile</h2>
+              <button className="secondary" type="button" onClick={signOut}>
+                Sign Out
               </button>
-            ))}
-          </div>
+            </div>
 
-          {(activeTab === 'send' || activeTab === 'receive') && (
-            <div className="panel">
-              <h3>{activeTab === 'send' ? 'Send Transaction' : 'Receive Transaction'}</h3>
-              <p className="muted">
-                Send/Receive are standard Web3 in/out transfers and are tracked under <strong>Transaction History</strong>.
-              </p>
+            <div className="profile-grid">
+              <div className="avatar-section">
+                <div className="avatar-frame">
+                  {profile.avatarUrl ? (
+                    <img src={profile.avatarUrl} alt="profile" className="avatar-preview" />
+                  ) : (
+                    <span>{profile.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+                  )}
+                </div>
+                <label>
+                  Add profile picture (upload)
+                  <input type="file" accept="image/*" onChange={onAvatarUpload} />
+                </label>
+              </div>
+
               <div className="form-grid">
                 <label>
-                  Address
-                  <input name="to" placeholder="0x..." value={txForm.to} onChange={onTxFormChange} />
+                  Name
+                  <input name="name" value={profile.name} onChange={onProfileChange} placeholder="Your name" />
                 </label>
                 <label>
-                  Amount
+                  Username
                   <input
-                    name="amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={txForm.amount}
-                    onChange={onTxFormChange}
+                    name="username"
+                    value={profile.username}
+                    onChange={onProfileChange}
+                    placeholder="username"
                   />
                 </label>
+                <label>
+                  Bio
+                  <input name="bio" value={profile.bio} onChange={onProfileChange} placeholder="Tell us about yourself" />
+                </label>
+                <label>
+                  Twitter
+                  <input name="twitter" value={profile.twitter} onChange={onProfileChange} placeholder="https://x.com/..." />
+                </label>
+                <label>
+                  LinkedIn
+                  <input
+                    name="linkedin"
+                    value={profile.linkedin}
+                    onChange={onProfileChange}
+                    placeholder="https://linkedin.com/in/..."
+                  />
+                </label>
+                <label>
+                  GitHub
+                  <input name="github" value={profile.github} onChange={onProfileChange} placeholder="https://github.com/..." />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="tabs">
+              {roleTabs.map((tab) => (
                 <button
-                  className="primary"
+                  key={tab.key}
                   type="button"
-                  onClick={() => pushTransaction(activeTab === 'send' ? 'send' : 'receive')}
+                  className={activeTab === tab.key ? 'active' : ''}
+                  onClick={() => setActiveTab(tab.key)}
                 >
-                  Confirm Transaction
+                  {tab.label}
                 </button>
-              </div>
+              ))}
             </div>
-          )}
 
-          {isEmployer && activeTab === 'pay' && (
-            <div className="panel">
-              <h3>Pay Salary</h3>
-              <p className="muted">Payroll payment with address, amount, and confirmation action.</p>
-              <div className="form-grid">
-                <label>
-                  Worker Address
-                  <input name="worker" placeholder="0x..." value={payForm.worker} onChange={onPayFormChange} />
-                </label>
-                <label>
-                  Salary Amount (USDC)
-                  <input
-                    name="amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="1000"
-                    value={payForm.amount}
-                    onChange={onPayFormChange}
-                  />
-                </label>
-                <button className="primary" type="button" onClick={confirmSalaryPayment}>
-                  Confirm Transaction
-                </button>
+            {(activeTab === 'send' || activeTab === 'receive') && (
+              <div className="panel">
+                <h3>{activeTab === 'send' ? 'Send Transaction' : 'Receive Transaction'}</h3>
+                <p className="muted">
+                  Send/Receive are standard Web3 in/out transfers and are tracked under <strong>Transaction History</strong>.
+                </p>
+                <div className="form-grid">
+                  <label>
+                    Address
+                    <input name="to" placeholder="0x..." value={txForm.to} onChange={onTxFormChange} />
+                  </label>
+                  <label>
+                    Amount
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={txForm.amount}
+                      onChange={onTxFormChange}
+                    />
+                  </label>
+                  <button
+                    className="primary"
+                    type="button"
+                    onClick={() => pushTransaction(activeTab === 'send' ? 'send' : 'receive')}
+                  >
+                    Confirm Transaction
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-
-          {isUser && activeTab === 'collect' && (
-            <div className="panel">
-              <h3>Collect Salary</h3>
-              <p className="muted">
-                Collect is for salary receival and includes amount received, invoice creation, invoice minting, and invoice NFT send.
-              </p>
-              <div className="form-grid">
-                <label>
-                  Amount Received (USDC)
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={collectAmount}
-                    onChange={(event) => setCollectAmount(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Create Invoice (Memo)
-                  <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} />
-                </label>
-                <button className="primary" type="button" onClick={collectSalary}>
-                  Mint Invoice and Send Invoice NFT
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="history-grid">
-            <article className="history-card">
-              <h3>Transaction History</h3>
-              <p className="muted">For standard send/receive transfers.</p>
-              <ul>
-                {transactionHistory.length === 0 ? (
-                  <li>No transactions yet.</li>
-                ) : (
-                  transactionHistory.map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.type.toUpperCase()}</strong> · {item.amount} · {SHORT_ADDRESS(item.to)} · {item.status}
-                    </li>
-                  ))
-                )}
-              </ul>
-              <p className="muted small">Total sent: {totalSent} | Total received: {totalReceived}</p>
-            </article>
-
-            {isEmployer ? (
-              <article className="history-card">
-                <h3>Payment History</h3>
-                <p className="muted">For salary pay actions.</p>
-                <ul>
-                  {paymentHistory.length === 0 ? (
-                    <li>No salary payments yet.</li>
-                  ) : (
-                    paymentHistory.map((item) => (
-                      <li key={item.id}>
-                        {item.amount} USDC → {SHORT_ADDRESS(item.worker)} · {item.status}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </article>
-            ) : (
-              <article className="history-card">
-                <h3>Receival History</h3>
-                <p className="muted">For salary collect actions.</p>
-                <ul>
-                  {receivalHistory.length === 0 ? (
-                    <li>No salary receivals yet.</li>
-                  ) : (
-                    receivalHistory.map((item) => (
-                      <li key={item.id}>
-                        {item.amount} USDC · {item.status} · Invoice {item.invoiceId} · NFT {item.invoiceNftId}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </article>
             )}
-          </div>
-        </section>
+
+            {isEmployer && activeTab === 'pay' && (
+              <div className="panel">
+                <h3>Pay Salary</h3>
+                <p className="muted">Payroll payment with address, amount, and confirmation action.</p>
+                <div className="form-grid">
+                  <label>
+                    Worker Address
+                    <input name="worker" placeholder="0x..." value={payForm.worker} onChange={onPayFormChange} />
+                  </label>
+                  <label>
+                    Salary Amount (USDC)
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="1000"
+                      value={payForm.amount}
+                      onChange={onPayFormChange}
+                    />
+                  </label>
+                  <button className="primary" type="button" onClick={confirmSalaryPayment}>
+                    Confirm Transaction
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isUser && activeTab === 'collect' && (
+              <div className="panel">
+                <h3>Collect Salary</h3>
+                <p className="muted">
+                  Collect is for salary receival and includes amount received, invoice creation, invoice minting, and invoice NFT send.
+                </p>
+                <div className="form-grid">
+                  <label>
+                    Amount Received (USDC)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={collectAmount}
+                      onChange={(event) => setCollectAmount(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Create Invoice (Memo)
+                    <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} />
+                  </label>
+                  <button className="primary" type="button" onClick={collectSalary}>
+                    Mint Invoice and Send Invoice NFT
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="history-grid">
+              <article className="history-card">
+                <h3>Transaction History</h3>
+                <p className="muted">For standard send/receive transfers.</p>
+                <ul>
+                  {transactionHistory.length === 0 ? (
+                    <li>No transactions yet.</li>
+                  ) : (
+                    transactionHistory.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.type.toUpperCase()}</strong> · {item.amount} · {SHORT_ADDRESS(item.to)} · {item.status}
+                      </li>
+                    ))
+                  )}
+                </ul>
+                <p className="muted small">Total sent: {totalSent} | Total received: {totalReceived}</p>
+              </article>
+
+              {isEmployer ? (
+                <article className="history-card">
+                  <h3>Payment History</h3>
+                  <p className="muted">For salary pay actions.</p>
+                  <ul>
+                    {paymentHistory.length === 0 ? (
+                      <li>No salary payments yet.</li>
+                    ) : (
+                      paymentHistory.map((item) => (
+                        <li key={item.id}>
+                          {item.amount} USDC → {SHORT_ADDRESS(item.worker)} · {item.status}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </article>
+              ) : (
+                <article className="history-card">
+                  <h3>Receival History</h3>
+                  <p className="muted">For salary collect actions.</p>
+                  <ul>
+                    {receivalHistory.length === 0 ? (
+                      <li>No salary receivals yet.</li>
+                    ) : (
+                      receivalHistory.map((item) => (
+                        <li key={item.id}>
+                          {item.amount} USDC · {item.status} · Invoice {item.invoiceId} · NFT {item.invoiceNftId}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </article>
+              )}
+            </div>
+          </section>
+        </>
       ) : null}
     </main>
   );
