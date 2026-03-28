@@ -155,6 +155,8 @@ function App() {
         { key: 'collect', label: 'Collect' }
       ];
 
+  const profileLabel = profile.name?.charAt(0)?.toUpperCase() || 'U';
+
   return (
     <main className="app-shell">
       <header className="top-card">
@@ -197,70 +199,8 @@ function App() {
       </section>
 
       {auth.registered ? (
-        <>
-          <section className="card">
-            <div className="profile-head">
-              <h2>Profile</h2>
-              <button className="secondary" type="button" onClick={signOut}>
-                Sign Out
-              </button>
-            </div>
-
-            <div className="profile-grid">
-              <div className="avatar-section">
-                <div className="avatar-frame">
-                  {profile.avatarUrl ? (
-                    <img src={profile.avatarUrl} alt="profile" className="avatar-preview" />
-                  ) : (
-                    <span>{profile.name?.charAt(0)?.toUpperCase() || 'U'}</span>
-                  )}
-                </div>
-                <label>
-                  Add profile picture (upload)
-                  <input type="file" accept="image/*" onChange={onAvatarUpload} />
-                </label>
-              </div>
-
-              <div className="form-grid">
-                <label>
-                  Name
-                  <input name="name" value={profile.name} onChange={onProfileChange} placeholder="Your name" />
-                </label>
-                <label>
-                  Username
-                  <input
-                    name="username"
-                    value={profile.username}
-                    onChange={onProfileChange}
-                    placeholder="username"
-                  />
-                </label>
-                <label>
-                  Bio
-                  <input name="bio" value={profile.bio} onChange={onProfileChange} placeholder="Tell us about yourself" />
-                </label>
-                <label>
-                  Twitter
-                  <input name="twitter" value={profile.twitter} onChange={onProfileChange} placeholder="https://x.com/..." />
-                </label>
-                <label>
-                  LinkedIn
-                  <input
-                    name="linkedin"
-                    value={profile.linkedin}
-                    onChange={onProfileChange}
-                    placeholder="https://linkedin.com/in/..."
-                  />
-                </label>
-                <label>
-                  GitHub
-                  <input name="github" value={profile.github} onChange={onProfileChange} placeholder="https://github.com/..." />
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section className="card">
+        <section className="card">
+          <div className="workspace-header">
             <div className="tabs">
               {roleTabs.map((tab) => (
                 <button
@@ -274,96 +214,175 @@ function App() {
               ))}
             </div>
 
-            {(activeTab === 'send' || activeTab === 'receive') && (
-              <div className="panel">
-                <h3>{activeTab === 'send' ? 'Send Transaction' : 'Receive Transaction'}</h3>
-                <p className="muted">
-                  Send/Receive are standard Web3 in/out transfers and are tracked under <strong>Transaction History</strong>.
-                </p>
+            <button
+              type="button"
+              className={`profile-tab ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => setActiveTab('profile')}
+              title="Profile"
+            >
+              {profile.avatarUrl ? (
+                <img src={profile.avatarUrl} alt="profile icon" className="avatar-preview" />
+              ) : (
+                <span>{profileLabel}</span>
+              )}
+            </button>
+          </div>
+
+          {(activeTab === 'send' || activeTab === 'receive') && (
+            <div className="panel">
+              <h3>{activeTab === 'send' ? 'Send Transaction' : 'Receive Transaction'}</h3>
+              <p className="muted">
+                Send/Receive are standard Web3 in/out transfers and are tracked under <strong>Transaction History</strong>.
+              </p>
+              <div className="form-grid">
+                <label>
+                  Address
+                  <input name="to" placeholder="0x..." value={txForm.to} onChange={onTxFormChange} />
+                </label>
+                <label>
+                  Amount
+                  <input
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={txForm.amount}
+                    onChange={onTxFormChange}
+                  />
+                </label>
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => pushTransaction(activeTab === 'send' ? 'send' : 'receive')}
+                >
+                  Confirm Transaction
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isEmployer && activeTab === 'pay' && (
+            <div className="panel">
+              <h3>Pay Salary</h3>
+              <p className="muted">Payroll payment with address, amount, and confirmation action.</p>
+              <div className="form-grid">
+                <label>
+                  Worker Address
+                  <input name="worker" placeholder="0x..." value={payForm.worker} onChange={onPayFormChange} />
+                </label>
+                <label>
+                  Salary Amount (USDC)
+                  <input
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="1000"
+                    value={payForm.amount}
+                    onChange={onPayFormChange}
+                  />
+                </label>
+                <button className="primary" type="button" onClick={confirmSalaryPayment}>
+                  Confirm Transaction
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isUser && activeTab === 'collect' && (
+            <div className="panel">
+              <h3>Collect Salary</h3>
+              <p className="muted">
+                Collect is for salary receival and includes amount received, invoice creation, invoice minting, and invoice NFT send.
+              </p>
+              <div className="form-grid">
+                <label>
+                  Amount Received (USDC)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={collectAmount}
+                    onChange={(event) => setCollectAmount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Create Invoice (Memo)
+                  <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} />
+                </label>
+                <button className="primary" type="button" onClick={collectSalary}>
+                  Mint Invoice and Send Invoice NFT
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && (
+            <div className="panel">
+              <div className="profile-head">
+                <h2>Profile</h2>
+                <button className="secondary" type="button" onClick={signOut}>
+                  Sign Out
+                </button>
+              </div>
+
+              <div className="profile-grid">
+                <div className="avatar-section">
+                  <div className="avatar-frame large">
+                    {profile.avatarUrl ? (
+                      <img src={profile.avatarUrl} alt="profile" className="avatar-preview" />
+                    ) : (
+                      <span>{profileLabel}</span>
+                    )}
+                  </div>
+                  <label>
+                    Add profile picture (upload)
+                    <input type="file" accept="image/*" onChange={onAvatarUpload} />
+                  </label>
+                </div>
+
                 <div className="form-grid">
                   <label>
-                    Address
-                    <input name="to" placeholder="0x..." value={txForm.to} onChange={onTxFormChange} />
+                    Name
+                    <input name="name" value={profile.name} onChange={onProfileChange} placeholder="Your name" />
                   </label>
                   <label>
-                    Amount
+                    Username
                     <input
-                      name="amount"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={txForm.amount}
-                      onChange={onTxFormChange}
-                    />
-                  </label>
-                  <button
-                    className="primary"
-                    type="button"
-                    onClick={() => pushTransaction(activeTab === 'send' ? 'send' : 'receive')}
-                  >
-                    Confirm Transaction
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {isEmployer && activeTab === 'pay' && (
-              <div className="panel">
-                <h3>Pay Salary</h3>
-                <p className="muted">Payroll payment with address, amount, and confirmation action.</p>
-                <div className="form-grid">
-                  <label>
-                    Worker Address
-                    <input name="worker" placeholder="0x..." value={payForm.worker} onChange={onPayFormChange} />
-                  </label>
-                  <label>
-                    Salary Amount (USDC)
-                    <input
-                      name="amount"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="1000"
-                      value={payForm.amount}
-                      onChange={onPayFormChange}
-                    />
-                  </label>
-                  <button className="primary" type="button" onClick={confirmSalaryPayment}>
-                    Confirm Transaction
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {isUser && activeTab === 'collect' && (
-              <div className="panel">
-                <h3>Collect Salary</h3>
-                <p className="muted">
-                  Collect is for salary receival and includes amount received, invoice creation, invoice minting, and invoice NFT send.
-                </p>
-                <div className="form-grid">
-                  <label>
-                    Amount Received (USDC)
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={collectAmount}
-                      onChange={(event) => setCollectAmount(event.target.value)}
+                      name="username"
+                      value={profile.username}
+                      onChange={onProfileChange}
+                      placeholder="username"
                     />
                   </label>
                   <label>
-                    Create Invoice (Memo)
-                    <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} />
+                    Bio
+                    <input name="bio" value={profile.bio} onChange={onProfileChange} placeholder="Tell us about yourself" />
                   </label>
-                  <button className="primary" type="button" onClick={collectSalary}>
-                    Mint Invoice and Send Invoice NFT
-                  </button>
+                  <label>
+                    Twitter
+                    <input name="twitter" value={profile.twitter} onChange={onProfileChange} placeholder="https://x.com/..." />
+                  </label>
+                  <label>
+                    LinkedIn
+                    <input
+                      name="linkedin"
+                      value={profile.linkedin}
+                      onChange={onProfileChange}
+                      placeholder="https://linkedin.com/in/..."
+                    />
+                  </label>
+                  <label>
+                    GitHub
+                    <input name="github" value={profile.github} onChange={onProfileChange} placeholder="https://github.com/..." />
+                  </label>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
+          {(activeTab === 'send' || activeTab === 'receive' || activeTab === 'pay' || activeTab === 'collect') && (
             <div className="history-grid">
               <article className="history-card">
                 <h3>Transaction History</h3>
@@ -416,8 +435,8 @@ function App() {
                 </article>
               )}
             </div>
-          </section>
-        </>
+          )}
+        </section>
       ) : null}
     </main>
   );

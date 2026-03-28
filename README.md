@@ -14,6 +14,8 @@ On registration, a profile is automatically created and can be edited with:
 - Social binding links (Twitter, LinkedIn, GitHub)
 - Sign out
 
+Profile is now accessed from a dedicated **top-right profile tab button** that displays your current profile picture (or initial).
+
 ## Role-based UI
 
 ### Employer
