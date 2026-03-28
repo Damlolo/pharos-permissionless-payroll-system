@@ -52,6 +52,20 @@ npm run dev
 npm run build
 ```
 
+## If the site appears blank
+
+Most blank-screen issues come from serving source files directly (`index.html` + `src/*`) instead of serving the built `dist/` bundle.
+
+Use:
+
+```bash
+npm install
+npm run build
+npm run preview
+```
+
+If deploying to static hosting (Netlify, Vercel, Nginx, GitHub Pages), publish the `dist/` directory after `npm run build`.
+
 ## Notes for Pharos integration
 
 The frontend includes chain metadata constants for Pharos and a CCTP-oriented flow model. For production:
