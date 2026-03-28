@@ -1,310 +1,392 @@
 import React, { useMemo, useState } from 'react';
 
-const PHAROS_CHAIN = {
+const PHAROS_TESTNET = {
   id: 688688,
-  name: 'Pharos Testnet',
-  rpcUrl: 'https://testnet.dplabs-internal.com',
-  explorer: 'https://testnet.pharosscan.xyz'
+  chainIdHex: '0xa81f0',
+  chainName: 'Pharos Testnet',
+  nativeCurrency: {
+    name: 'PHRS',
+    symbol: 'PHRS',
+    decimals: 18
+  },
+  rpcUrls: ['https://testnet.dplabs-internal.com'],
+  blockExplorerUrls: ['https://testnet.pharosscan.xyz']
 };
 
-const SUPPORTED_CHAINS = [
-  { id: 1, name: 'Ethereum' },
-  { id: 10, name: 'Optimism' },
-  { id: 137, name: 'Polygon' },
-  { id: 42161, name: 'Arbitrum' },
-  { id: 8453, name: 'Base' },
-  { id: PHAROS_CHAIN.id, name: PHAROS_CHAIN.name }
-];
-
-const INITIAL_PAYMENTS = [
-  {
-    id: 'pay_001',
-    worker: '0xA12D...9Fa2',
-    amount: 1200,
-    sourceChain: 'Ethereum',
-    destinationChain: 'Pharos Testnet',
-    status: 'Settled',
-    txHash: '0x8fc...a11',
-    streamedPerSecond: false,
-    timestamp: '2026-03-28T09:00:00Z'
-  },
-  {
-    id: 'pay_002',
-    worker: '0xA12D...9Fa2',
-    amount: 450,
-    sourceChain: 'Base',
-    destinationChain: 'Pharos Testnet',
-    status: 'Streaming',
-    txHash: '0x92b...ee4',
-    streamedPerSecond: true,
-    timestamp: '2026-03-28T10:15:00Z'
-  }
-];
+const SHORT_ADDRESS = (value = '') =>
+  value.length > 10 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 
 function App() {
-  const [mode, setMode] = useState('employer');
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS);
-  const [invoiceAmount, setInvoiceAmount] = useState('350');
-  const [invoiceMemo, setInvoiceMemo] = useState('March maintenance retainer');
-  const [invoiceNftTokenId, setInvoiceNftTokenId] = useState('');
+  const [auth, setAuth] = useState({ email: '', role: 'employer', registered: false });
+  const [walletAddress, setWalletAddress] = useState('');
+  const [connectedChainId, setConnectedChainId] = useState(null);
+  const [walletError, setWalletError] = useState('');
+  const [activeTab, setActiveTab] = useState('send');
 
-  const [employerForm, setEmployerForm] = useState({
-    worker: '',
-    amount: '',
-    sourceChainId: '1',
-    destinationChainId: String(PHAROS_CHAIN.id),
-    streamPerSecond: false
-  });
+  const [txForm, setTxForm] = useState({ to: '', amount: '' });
+  const [transactionHistory, setTransactionHistory] = useState([]);
 
-  const totalPaid = useMemo(
-    () => payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
-    [payments]
+  const [payForm, setPayForm] = useState({ worker: '', amount: '' });
+  const [paymentHistory, setPaymentHistory] = useState([]);
+
+  const [collectAmount, setCollectAmount] = useState('0');
+  const [invoiceMemo, setInvoiceMemo] = useState('Monthly salary invoice');
+  const [receivalHistory, setReceivalHistory] = useState([]);
+
+  const isEmployer = auth.role === 'employer';
+  const isUser = auth.role === 'user';
+
+  const totalSent = useMemo(
+    () => transactionHistory.filter((item) => item.type === 'send').reduce((sum, item) => sum + item.amount, 0),
+    [transactionHistory]
   );
 
-  const settledPayments = useMemo(
-    () => payments.filter((payment) => payment.status === 'Settled').length,
-    [payments]
+  const totalReceived = useMemo(
+    () => transactionHistory.filter((item) => item.type === 'receive').reduce((sum, item) => sum + item.amount, 0),
+    [transactionHistory]
   );
 
-  const creditScore = useMemo(() => {
-    if (!payments.length) return 300;
-    const punctualityScore = (settledPayments / payments.length) * 450;
-    const historyScore = Math.min(payments.length * 30, 220);
-    const volumeScore = Math.min(totalPaid / 25, 180);
-    return Math.min(Math.round(300 + punctualityScore + historyScore + volumeScore), 850);
-  }, [payments, settledPayments, totalPaid]);
+  const ensurePharos = async () => {
+    if (!window.ethereum) {
+      throw new Error('MetaMask (or compatible wallet) is required.');
+    }
 
-  const handleEmployerChange = (event) => {
-    const { name, value, type, checked } = event.target;
-    setEmployerForm((current) => ({
-      ...current,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: PHAROS_TESTNET.chainIdHex }]
+      });
+    } catch (error) {
+      if (error.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [PHAROS_TESTNET]
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    setConnectedChainId(PHAROS_TESTNET.id);
   };
 
-  const handlePay = (event) => {
+  const connectWallet = async () => {
+    setWalletError('');
+    try {
+      if (!window.ethereum) {
+        throw new Error('No wallet found. Install MetaMask first.');
+      }
+
+      await ensurePharos();
+
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const chainHex = await window.ethereum.request({ method: 'eth_chainId' });
+      setWalletAddress(accounts[0] || '');
+      setConnectedChainId(Number.parseInt(chainHex, 16));
+    } catch (error) {
+      setWalletError(error?.message || 'Wallet connection failed.');
+    }
+  };
+
+  const handleRegister = (event) => {
     event.preventDefault();
+    setAuth((current) => ({ ...current, registered: true }));
+    setActiveTab('send');
+  };
 
-    const sourceChain = SUPPORTED_CHAINS.find(
-      (chain) => String(chain.id) === employerForm.sourceChainId
-    );
-    const destinationChain = SUPPORTED_CHAINS.find(
-      (chain) => String(chain.id) === employerForm.destinationChainId
-    );
+  const onAuthChange = (event) => {
+    const { name, value } = event.target;
+    setAuth((current) => ({ ...current, [name]: value, registered: false }));
+  };
 
-    const payment = {
-      id: `pay_${String(Date.now()).slice(-6)}`,
-      worker: employerForm.worker,
-      amount: Number(employerForm.amount),
-      sourceChain: sourceChain?.name ?? 'Unknown',
-      destinationChain: destinationChain?.name ?? 'Unknown',
-      status: employerForm.streamPerSecond ? 'Streaming' : 'Pending CCTP',
-      txHash: `0x${Math.random().toString(16).slice(2, 14)}...${Math.random()
-        .toString(16)
-        .slice(2, 6)}`,
-      streamedPerSecond: employerForm.streamPerSecond,
-      timestamp: new Date().toISOString()
+  const onTxFormChange = (event) => {
+    const { name, value } = event.target;
+    setTxForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const pushTransaction = (type) => {
+    const amountNumber = Number(txForm.amount);
+    if (!txForm.to || !amountNumber) return;
+
+    const nextTx = {
+      id: `tx_${Date.now()}`,
+      type,
+      to: txForm.to,
+      amount: amountNumber,
+      status: 'Confirmed',
+      hash: `0x${Math.random().toString(16).slice(2, 12)}${Math.random().toString(16).slice(2, 12)}`,
+      time: new Date().toLocaleString()
     };
 
-    setPayments((current) => [payment, ...current]);
-
-    setEmployerForm({
-      worker: '',
-      amount: '',
-      sourceChainId: employerForm.sourceChainId,
-      destinationChainId: employerForm.destinationChainId,
-      streamPerSecond: employerForm.streamPerSecond
-    });
+    setTransactionHistory((current) => [nextTx, ...current]);
+    setTxForm({ to: '', amount: '' });
   };
 
-  const handleGenerateInvoice = (event) => {
-    event.preventDefault();
-    const generatedId = `INV-${Math.floor(100000 + Math.random() * 900000)}`;
-    setInvoiceNftTokenId(generatedId);
+  const onPayFormChange = (event) => {
+    const { name, value } = event.target;
+    setPayForm((current) => ({ ...current, [name]: value }));
   };
+
+  const confirmSalaryPayment = () => {
+    const amountNumber = Number(payForm.amount);
+    if (!payForm.worker || !amountNumber) return;
+
+    const payment = {
+      id: `pay_${Date.now()}`,
+      worker: payForm.worker,
+      amount: amountNumber,
+      status: 'Confirmed',
+      hash: `0x${Math.random().toString(16).slice(2, 12)}${Math.random().toString(16).slice(2, 12)}`,
+      time: new Date().toLocaleString()
+    };
+
+    setPaymentHistory((current) => [payment, ...current]);
+    setPayForm({ worker: '', amount: '' });
+  };
+
+  const collectSalary = () => {
+    const amountNumber = Number(collectAmount);
+    if (!amountNumber) return;
+
+    const collectEntry = {
+      id: `recv_${Date.now()}`,
+      amount: amountNumber,
+      invoiceMemo,
+      invoiceId: `INV-${Math.floor(100000 + Math.random() * 900000)}`,
+      invoiceNftId: `NFT-${Math.floor(1000 + Math.random() * 9000)}`,
+      status: 'Collected',
+      time: new Date().toLocaleString()
+    };
+
+    setReceivalHistory((current) => [collectEntry, ...current]);
+    setCollectAmount('0');
+  };
+
+  const roleTabs = isEmployer
+    ? [
+        { key: 'send', label: 'Send' },
+        { key: 'receive', label: 'Receive' },
+        { key: 'pay', label: 'Pay' }
+      ]
+    : [
+        { key: 'send', label: 'Send' },
+        { key: 'receive', label: 'Receive' },
+        { key: 'collect', label: 'Collect' }
+      ];
 
   return (
-    <main className="container">
-      <header className="hero">
-        <h1>RealFi Payroll dApp on Pharos</h1>
-        <p>
-          Deposit USDC from any chain, route with CCTP, settle instantly in worker-preferred chain,
-          and power programmable payroll with streaming, invoice NFTs, and credit intelligence.
-        </p>
-        <div className="chain-card">
-          <h3>Pharos Network Target</h3>
+    <main className="app-shell">
+      <header className="top-card">
+        <div>
+          <h1>RealFi Payroll · Pharos</h1>
+          <p>Connect wallet, switch to Pharos testnet by default, and operate payroll + Web3 transfers.</p>
+        </div>
+        <div className="wallet-box">
           <p>
-            Chain: <strong>{PHAROS_CHAIN.name}</strong> (ID: {PHAROS_CHAIN.id})
+            Chain target: <strong>{PHAROS_TESTNET.chainName}</strong> ({PHAROS_TESTNET.id})
           </p>
-          <p>RPC: {PHAROS_CHAIN.rpcUrl}</p>
-          <a href={PHAROS_CHAIN.explorer} target="_blank" rel="noreferrer">
-            Open Explorer
-          </a>
+          <button className="primary" type="button" onClick={connectWallet}>
+            {walletAddress ? `Connected: ${SHORT_ADDRESS(walletAddress)}` : 'Connect Wallet'}
+          </button>
+          <button className="secondary" type="button" onClick={ensurePharos}>
+            Switch to Pharos Testnet
+          </button>
+          <p className="muted">Active chain ID: {connectedChainId ?? 'Not connected'}</p>
+          {walletError ? <p className="error">{walletError}</p> : null}
         </div>
       </header>
 
-      <section className="mode-switch">
-        <button
-          className={mode === 'employer' ? 'active' : ''}
-          onClick={() => setMode('employer')}
-          type="button"
-        >
-          Employer UI
-        </button>
-        <button
-          className={mode === 'worker' ? 'active' : ''}
-          onClick={() => setMode('worker')}
-          type="button"
-        >
-          Worker UI
-        </button>
+      <section className="card">
+        <h2>Register</h2>
+        <form onSubmit={handleRegister} className="register-grid">
+          <label>
+            Email
+            <input
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              value={auth.email}
+              onChange={onAuthChange}
+              required
+            />
+          </label>
+          <label>
+            Role
+            <select name="role" value={auth.role} onChange={onAuthChange}>
+              <option value="employer">Employer</option>
+              <option value="user">User</option>
+            </select>
+          </label>
+          <button className="primary" type="submit">
+            Register
+          </button>
+        </form>
+        {auth.registered ? (
+          <p className="success">
+            Registered as <strong>{auth.role}</strong> with <strong>{auth.email}</strong>
+          </p>
+        ) : null}
       </section>
 
-      {mode === 'employer' ? (
-        <section className="panel">
-          <h2>Employer Payroll Console</h2>
-          <form onSubmit={handlePay} className="form-grid">
-            <label>
-              Worker address
-              <input
-                name="worker"
-                placeholder="0x..."
-                value={employerForm.worker}
-                onChange={handleEmployerChange}
-                required
-              />
-            </label>
-            <label>
-              Amount (USDC)
-              <input
-                name="amount"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="1000"
-                value={employerForm.amount}
-                onChange={handleEmployerChange}
-                required
-              />
-            </label>
-            <label>
-              Source chain
-              <select name="sourceChainId" value={employerForm.sourceChainId} onChange={handleEmployerChange}>
-                {SUPPORTED_CHAINS.map((chain) => (
-                  <option key={`source-${chain.id}`} value={chain.id}>
-                    {chain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Destination chain
-              <select
-                name="destinationChainId"
-                value={employerForm.destinationChainId}
-                onChange={handleEmployerChange}
+      {auth.registered ? (
+        <section className="card">
+          <div className="tabs">
+            {roleTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                className={activeTab === tab.key ? 'active' : ''}
+                onClick={() => setActiveTab(tab.key)}
               >
-                {SUPPORTED_CHAINS.map((chain) => (
-                  <option key={`destination-${chain.id}`} value={chain.id}>
-                    {chain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="checkbox">
-              <input
-                name="streamPerSecond"
-                type="checkbox"
-                checked={employerForm.streamPerSecond}
-                onChange={handleEmployerChange}
-              />
-              Enable per-second salary streaming
-            </label>
-            <button className="cta" type="submit">
-              Pay via CCTP
-            </button>
-          </form>
-
-          <div className="flow-note">
-            <h3>Execution Flow</h3>
-            <ol>
-              <li>Employer deposits USDC on source chain vault.</li>
-              <li>CCTP burns and mints canonical USDC on destination chain.</li>
-              <li>Payroll contract on Pharos settles instantly or starts streaming schedule.</li>
-            </ol>
-          </div>
-        </section>
-      ) : (
-        <section className="panel">
-          <h2>Worker Payment Hub</h2>
-          <div className="stats">
-            <article>
-              <h3>Total received</h3>
-              <p>{totalPaid.toLocaleString()} USDC</p>
-            </article>
-            <article>
-              <h3>Settled payouts</h3>
-              <p>{settledPayments}</p>
-            </article>
-            <article>
-              <h3>Credit score</h3>
-              <p>{creditScore}</p>
-            </article>
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          <h3>Payment history and transaction status</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Amount</th>
-                <th>Route</th>
-                <th>Status</th>
-                <th>Tx</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((payment) => (
-                <tr key={payment.id}>
-                  <td>{payment.id}</td>
-                  <td>{payment.amount} USDC</td>
-                  <td>
-                    {payment.sourceChain} → {payment.destinationChain}
-                  </td>
-                  <td>{payment.status}</td>
-                  <td>{payment.txHash}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <form onSubmit={handleGenerateInvoice} className="invoice-form">
-            <h3>Generate invoice and convert to NFT</h3>
-            <label>
-              Invoice amount (USDC)
-              <input
-                type="number"
-                min="1"
-                value={invoiceAmount}
-                onChange={(event) => setInvoiceAmount(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Memo
-              <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} required />
-            </label>
-            <button type="submit" className="cta">
-              Mint invoice NFT
-            </button>
-            {invoiceNftTokenId ? (
-              <p className="success">
-                Invoice token minted: <strong>{invoiceNftTokenId}</strong> ({invoiceAmount} USDC · {invoiceMemo})
+          {(activeTab === 'send' || activeTab === 'receive') && (
+            <div className="panel">
+              <h3>{activeTab === 'send' ? 'Send Transaction' : 'Receive Transaction'}</h3>
+              <p className="muted">
+                Send/Receive are standard Web3 in/out transfers and are tracked under <strong>Transaction History</strong>.
               </p>
-            ) : null}
-          </form>
+              <div className="form-grid">
+                <label>
+                  Address
+                  <input name="to" placeholder="0x..." value={txForm.to} onChange={onTxFormChange} />
+                </label>
+                <label>
+                  Amount
+                  <input
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={txForm.amount}
+                    onChange={onTxFormChange}
+                  />
+                </label>
+                <button
+                  className="primary"
+                  type="button"
+                  onClick={() => pushTransaction(activeTab === 'send' ? 'send' : 'receive')}
+                >
+                  Confirm Transaction
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isEmployer && activeTab === 'pay' && (
+            <div className="panel">
+              <h3>Pay Salary</h3>
+              <p className="muted">Payroll payment with address, amount, and confirmation action.</p>
+              <div className="form-grid">
+                <label>
+                  Worker Address
+                  <input name="worker" placeholder="0x..." value={payForm.worker} onChange={onPayFormChange} />
+                </label>
+                <label>
+                  Salary Amount (USDC)
+                  <input
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="1000"
+                    value={payForm.amount}
+                    onChange={onPayFormChange}
+                  />
+                </label>
+                <button className="primary" type="button" onClick={confirmSalaryPayment}>
+                  Confirm Transaction
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isUser && activeTab === 'collect' && (
+            <div className="panel">
+              <h3>Collect Salary</h3>
+              <p className="muted">
+                Collect is for salary receival and includes amount received, invoice creation, invoice minting, and invoice NFT send.
+              </p>
+              <div className="form-grid">
+                <label>
+                  Amount Received (USDC)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={collectAmount}
+                    onChange={(event) => setCollectAmount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Create Invoice (Memo)
+                  <input value={invoiceMemo} onChange={(event) => setInvoiceMemo(event.target.value)} />
+                </label>
+                <button className="primary" type="button" onClick={collectSalary}>
+                  Mint Invoice and Send Invoice NFT
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="history-grid">
+            <article className="history-card">
+              <h3>Transaction History</h3>
+              <p className="muted">For standard send/receive transfers.</p>
+              <ul>
+                {transactionHistory.length === 0 ? (
+                  <li>No transactions yet.</li>
+                ) : (
+                  transactionHistory.map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.type.toUpperCase()}</strong> · {item.amount} · {SHORT_ADDRESS(item.to)} · {item.status}
+                    </li>
+                  ))
+                )}
+              </ul>
+              <p className="muted small">Total sent: {totalSent} | Total received: {totalReceived}</p>
+            </article>
+
+            {isEmployer ? (
+              <article className="history-card">
+                <h3>Payment History</h3>
+                <p className="muted">For salary pay actions.</p>
+                <ul>
+                  {paymentHistory.length === 0 ? (
+                    <li>No salary payments yet.</li>
+                  ) : (
+                    paymentHistory.map((item) => (
+                      <li key={item.id}>
+                        {item.amount} USDC → {SHORT_ADDRESS(item.worker)} · {item.status}
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </article>
+            ) : (
+              <article className="history-card">
+                <h3>Receival History</h3>
+                <p className="muted">For salary collect actions.</p>
+                <ul>
+                  {receivalHistory.length === 0 ? (
+                    <li>No salary receivals yet.</li>
+                  ) : (
+                    receivalHistory.map((item) => (
+                      <li key={item.id}>
+                        {item.amount} USDC · {item.status} · Invoice {item.invoiceId} · NFT {item.invoiceNftId}
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </article>
+            )}
+          </div>
         </section>
-      )}
+      ) : null}
     </main>
   );
 }

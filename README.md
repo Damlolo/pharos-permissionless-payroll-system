@@ -1,43 +1,40 @@
-# RealFi Payroll dApp (Pharos + CCTP)
+# RealFi Payroll dApp (Pharos Testnet)
 
-A starter implementation of a **RealFi payroll dApp** designed for **Pharos chain settlement**, with:
+This app now supports:
 
-- Employer-funded USDC payroll from any supported chain
-- CCTP route simulation to worker preferred chain
-- Instant payout in USDC
-- Per-second streaming salary support
-- Worker invoice generation and NFT conversion
-- Credit scoring from payroll history
+- Wallet connect (MetaMask-compatible)
+- Default network switch to **Pharos Testnet**
+- Email registration as either:
+  - **Employer**
+  - **User**
 
-## UI Modes
+## Role-based UI
 
-### Employer UI
+### Employer
 
-- Input worker address
-- Input USDC amount
-- Select source chain and destination chain
-- Trigger **Pay via CCTP**
-- Toggle per-second streaming mode
+Tabs:
 
-### Worker UI
+- **Send**: regular Web3 outgoing transfer simulation
+- **Receive**: regular Web3 incoming transfer simulation
+- **Pay**: salary payment flow (`worker address`, `amount`, `confirm transaction`)
 
-- View payment history
-- View transaction status
-- Generate invoice
-- Convert invoice to NFT (demo token ID)
-- Track payroll-driven credit score
+Histories:
 
-## Contracts Included
+- **Transaction History** (send/receive)
+- **Payment History** (salary pay actions)
 
-- `contracts/RealFiPayroll.sol`
-  - Instant payroll settlement
-  - Per-second stream opening + claiming
-- `contracts/InvoiceNFT.sol`
-  - Mint invoice NFTs
-  - Mark invoices paid
-- `contracts/CreditScoring.sol`
-  - Record payment history
-  - Compute worker credit score
+### User
+
+Tabs:
+
+- **Send**: regular Web3 outgoing transfer simulation
+- **Receive**: regular Web3 incoming transfer simulation
+- **Collect**: salary receival flow (`amount received`, `create invoice`, `mint invoice`, `send invoice NFT`)
+
+Histories:
+
+- **Transaction History** (send/receive)
+- **Receival History** (salary collect actions)
 
 ## Run locally
 
@@ -46,32 +43,20 @@ npm install
 npm run dev
 ```
 
-## Build
+## Build + preview
 
 ```bash
-npm run build
-```
-
-## If the site appears blank
-
-Most blank-screen issues come from serving source files directly (`index.html` + `src/*`) instead of serving the built `dist/` bundle.
-
-Use:
-
-```bash
-npm install
 npm run build
 npm run preview
 ```
 
-If deploying to static hosting (Netlify, Vercel, Nginx, GitHub Pages), publish the `dist/` directory after `npm run build`.
+## If website is blank
 
-## Notes for Pharos integration
+Do **not** host raw source files directly (`src/*`).
+Always build and host the `dist/` output.
 
-The frontend includes chain metadata constants for Pharos and a CCTP-oriented flow model. For production:
+## Smart contracts included
 
-1. Replace simulated payment actions with wallet + contract calls.
-2. Integrate Circle CCTP contracts/attestations and finality checks.
-3. Configure deployed contract addresses per chain.
-4. Add indexed event listeners for cross-chain state updates.
-5. Harden invoice NFT with full ERC-721 implementation and metadata URIs.
+- `contracts/RealFiPayroll.sol`
+- `contracts/InvoiceNFT.sol`
+- `contracts/CreditScoring.sol`
